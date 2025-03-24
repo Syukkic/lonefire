@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
+pub const MAX_CONCURRENT_DOWNLOADS: usize = 5;
+
 #[derive(Debug, Deserialize)]
 pub struct PixivResponse {
     pub illust: HashMap<String, IllustInfo>,
