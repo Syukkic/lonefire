@@ -2,8 +2,11 @@ use anyhow::{Context, Result, anyhow};
 use config::PixivResponse;
 use futures::stream::{self, StreamExt};
 use helpers::{format_filename, generate_image_urls, normalize_image_url, set_headers};
-// use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use reqwest::{Client, header::RANGE};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use reqwest::{
+    Client,
+    header::{CONTENT_LENGTH, RANGE},
+};
 use scraper::{Html, Selector};
 use std::{
     fs::{OpenOptions, create_dir_all, rename},
@@ -35,7 +38,9 @@ pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
     if meta_tag.is_none() {
         eprintln!("Could not find `meta-preload-data`, request may be restricted");
     }
-    let meta_content = meta_tag.unwrap().value().attr("content").unwrap_or("");
+    let meta_content = meta_tag
+        .and_then(|tag| tag.value().attr("content"))
+        .context("`content` attribute not found in `meta` tag")?;
     let pixiv_response: PixivResponse = serde_json::from_str(meta_content)?;
     let illust_data = pixiv_response
         .illust
@@ -77,24 +82,22 @@ pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
         eprintln!("No iamge URL found!");
     }
 
-    // let m = MultiProgress::new();
-    // let sty = ProgressStyle::with_template(
-    // "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-    // )
-    // .unwrap()
-    // .progress_chars("##-");
+    let m = MultiProgress::new();
+    let sty = ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .progress_chars("##-");
 
     stream::iter(image_urls.into_iter().map(|url| {
         let client = client.clone();
         let artwork_dir = artwork_dir.clone();
-        // let pb = m.add(ProgressBar::new(page_count as u64));
-        // pb.set_style(sty.clone());
-        // pb.set_message(url.split('/').next_back().unwrap_or(&url).to_string());
+        let pb = m.add(ProgressBar::new(page_count as u64));
+        pb.set_style(sty.clone());
+        pb.set_message(url.split('/').next_back().unwrap_or(&url).to_string());
         async move {
-            if let Err(e) = download_image(client, &url, &artwork_dir).await {
-                eprintln!("Error downloading {}: {}", url, e);
-            }
-            // pb.inc(1);
+            let _ = (download_image(client, &url, &artwork_dir, &pb).await).is_err();
+            pb.inc(1);
         }
     }))
     .buffer_unordered(MAX_CONCURRENT_DOWNLOADS)
@@ -105,12 +108,12 @@ pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
     Ok(())
 }
 
-async fn download_image(client: Client, url: &str, dir: &Path) -> Result<()> {
+async fn download_image(client: Client, url: &str, dir: &Path, pb: &ProgressBar) -> Result<()> {
     let filename = format_filename(url).context("Failed to format filename")?;
     let filepath = dir.join(&filename);
     let temp_path = filepath.with_extension("part");
     if filepath.exists() {
-        // pb.finish_with_message("Already exists");
+        pb.finish_with_message("Already exists");
         return Ok(());
     }
     let existing_size = temp_path.metadata().map(|s| s.len()).unwrap_or(0);
@@ -119,27 +122,27 @@ async fn download_image(client: Client, url: &str, dir: &Path) -> Result<()> {
 
     let response = client.get(url).headers(headers).send().await?;
     if !response.status().is_success() {
-        // pb.finish_with_message("Failed to download");
+        pb.finish_with_message("Failed to download");
         return Err(anyhow!("HTTP error: {}", response.status()));
     }
-    // let total_size = if let Some(content_range) = response.headers().get("Content-Range") {
-    //     content_range
-    //         .to_str()?
-    //         .split('/')
-    //         .nth(1)
-    //         .and_then(|s| s.parse::<u64>().ok())
-    //         .unwrap_or(0)
-    // } else {
-    //     response
-    //         .headers()
-    //         .get(CONTENT_LENGTH)
-    //         .and_then(|v| v.to_str().ok())
-    //         .and_then(|v| v.parse::<u64>().ok())
-    //         .unwrap_or(0)
-    // };
+    let total_size = if let Some(content_range) = response.headers().get("Content-Range") {
+        content_range
+            .to_str()?
+            .split('/')
+            .nth(1)
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0)
+    } else {
+        response
+            .headers()
+            .get(CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0)
+    };
 
-    // pb.set_length(total_size);
-    // pb.set_position(existing_size);
+    pb.set_length(total_size);
+    pb.set_position(existing_size);
 
     let mut file = OpenOptions::new()
         .append(true)
@@ -150,10 +153,10 @@ async fn download_image(client: Client, url: &str, dir: &Path) -> Result<()> {
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         file.write_all(&chunk)?;
-        // pb.inc(chunk.len() as u64);
+        pb.inc(chunk.len() as u64);
     }
 
-    // pb.finish_with_message("Download completed.");
+    pb.finish_with_message("Download completed.");
     rename(temp_path, filepath)?;
     Ok(())
 }
