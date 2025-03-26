@@ -59,9 +59,9 @@ pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
 
     let page_count = illust_data.page_count as usize;
     let image_urls: Vec<String> = match &illust_data.urls.original {
-        Some(original_url) if original_url.contains(&artwork_id) => {
-            generate_image_urls(original_url, page_count)
-        }
+        Some(original_url) if original_url.contains(&artwork_id) => (0..page_count)
+            .map(|seq| original_url.replace("p0", &format!("p{}", seq)))
+            .collect(),
         _ => {
             illust_data
                 .user_illusts
