@@ -17,7 +17,7 @@ use url::Url;
 
 use crate::{
     config::{self, MAX_CONCURRENT_DOWNLOADS},
-    helpers,
+    helpers::{self, filter_valid_urls},
 };
 
 pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
@@ -63,7 +63,7 @@ pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
             .map(|seq| original_url.replace("p0", &format!("p{}", seq)))
             .collect(),
         _ => {
-            illust_data
+            let urls = illust_data
                 .user_illusts
                 .as_ref()
                 .map(|user_illusts| {
@@ -75,7 +75,9 @@ pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
                         .flat_map(|normalized_url| generate_image_urls(&normalized_url, page_count))
                         .collect::<Vec<String>>()
                 })
-                .unwrap_or_default()
+                .unwrap_or_default();
+
+            filter_valid_urls(urls).await
         }
     };
     if image_urls.is_empty() {

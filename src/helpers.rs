@@ -1,7 +1,10 @@
+use futures::{StreamExt, stream};
 use regex::Regex;
 use reqwest::header::{
     ACCEPT, ACCEPT_LANGUAGE, CONNECTION, HeaderMap, HeaderValue, REFERER, USER_AGENT,
 };
+
+use crate::config::MAX_CONCURRENT_DOWNLOADS;
 
 pub fn normalize_image_url(base_url: &str) -> String {
     let re_custom_thumb = Regex::new(r"/c/250x250_80_a2/custom-thumb").unwrap();
@@ -27,6 +30,23 @@ pub fn generate_image_urls(base_url: &str, page_count: usize) -> Vec<String> {
             vec![url_jpg, url_png]
         })
         .collect()
+}
+
+async fn probe_image_url(url: String) -> Option<String> {
+    let probe_client = reqwest::Client::new();
+    let headers = set_headers();
+    match probe_client.head(&url).headers(headers).send().await {
+        Ok(response) if response.status().is_success() => Some(url),
+        _ => None,
+    }
+}
+
+pub async fn filter_valid_urls(urls: Vec<String>) -> Vec<String> {
+    stream::iter(urls.into_iter().map(probe_image_url))
+        .buffer_unordered(MAX_CONCURRENT_DOWNLOADS)
+        .filter_map(|url| async { url })
+        .collect::<Vec<String>>()
+        .await
 }
 
 pub fn format_filename(url: &str) -> Option<String> {
