@@ -85,10 +85,10 @@ pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
 
     let m = MultiProgress::new();
     let sty = ProgressStyle::with_template(
-        "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        "{spinner:.green}[{eta}][{bar:40.cyan/blue}] {bytes}/{total_bytes} {msg}",
     )
     .unwrap()
-    .progress_chars("##-");
+    .progress_chars("#>-");
 
     stream::iter(image_urls.into_iter().map(|url| {
         let client = client.clone();
@@ -114,7 +114,7 @@ async fn download_image(client: Client, url: &str, dir: &Path, pb: &ProgressBar)
     let filepath = dir.join(&filename);
     let temp_path = filepath.with_extension("part");
     if filepath.exists() {
-        pb.finish_with_message("Already exists");
+        pb.finish_with_message(format!("{filename} already exists"));
         return Ok(());
     }
     let existing_size = temp_path.metadata().map(|s| s.len()).unwrap_or(0);
@@ -157,7 +157,7 @@ async fn download_image(client: Client, url: &str, dir: &Path, pb: &ProgressBar)
         pb.inc(chunk.len() as u64);
     }
 
-    pb.finish_with_message("Download completed.");
+    pb.finish_with_message(format!("{filename} 🗹"));
     rename(temp_path, filepath)?;
     Ok(())
 }
