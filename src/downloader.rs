@@ -1,7 +1,9 @@
 use anyhow::{Context, Result, anyhow};
-use config::PixivResponse;
+use config::{MAX_CONCURRENT_DOWNLOADS, PixivResponse};
 use futures::stream::{self, StreamExt};
-use helpers::{format_filename, generate_image_urls, normalize_image_url, set_headers};
+use helpers::{
+    filter_valid_urls, format_filename, generate_image_urls, normalize_image_url, set_headers,
+};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest::{
     Client,
@@ -15,10 +17,7 @@ use std::{
 };
 use url::Url;
 
-use crate::{
-    config::{self, MAX_CONCURRENT_DOWNLOADS},
-    helpers::{self, filter_valid_urls},
-};
+use crate::{config, helpers};
 
 pub async fn download_pixiv_artwork(artwork_url: &str) -> Result<()> {
     let client = Client::new();
