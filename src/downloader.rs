@@ -150,13 +150,10 @@ async fn download_image(client: Client, url: &str, dir: &Path, pb: &ProgressBar)
         .create(true)
         .open(&temp_path)?;
 
-    let mut downloaded_size = 0;
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         file.write_all(&chunk)?;
-        downloaded_size += chunk.len() as u64;
-        pb.set_length(downloaded_size);
         pb.inc(chunk.len() as u64);
     }
 
