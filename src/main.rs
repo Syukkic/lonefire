@@ -9,7 +9,7 @@ mod helpers;
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: pixiv_download <URL>");
+        eprintln!("Usage: lonefire <URL>\nBTW, lonefire can't download GIF image");
         std::process::exit(1);
     }
     let artwork_url = &args[1];

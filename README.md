@@ -1,4 +1,4 @@
-use:
+usage:
 
 ```console
 cargo build --release
